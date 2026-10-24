@@ -9,6 +9,6 @@ void main() async {
   // Khởi tạo database
   await LocalDatabase().init();
 
-  // Chạy ứng dụng chính (đã bao gồm MaterialApp, Theme và MainScreen)
+  // Chạy ứng dụng chính
   runApp(const App());
 }

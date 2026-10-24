@@ -8,8 +8,11 @@ class VocabModel {
   final String partOfSpeech;
   final String example;
   final String context;
-  final String source; // 'Nhập tay', 'Quét OCR', 'Từ điển có sẵn'
-  final bool isBuiltIn; // true = từ điển có sẵn, false = do người dùng thêm
+  final String source;
+  final bool isBuiltIn;
+  
+  // Trường mới: Phân loại theo lớp (10, 11, 12 hoặc null cho từ tự thêm)
+  final int? grade; 
   
   final int difficulty;
   final int forgetCount;
@@ -28,6 +31,7 @@ class VocabModel {
     this.context = '',
     this.source = 'Nhập tay',
     this.isBuiltIn = false,
+    this.grade, // Mặc định null
     this.difficulty = 3,
     this.forgetCount = 0,
     this.errorRate = 0.0,
@@ -41,6 +45,11 @@ class VocabModel {
     if (lastReviewDate == null) return 'Từ mới';
     if (errorRate < 0.2 && forgetCount == 0) return 'Đã thuộc';
     return 'Đang học';
+  }
+
+  String get gradeLabel {
+    if (grade == null) return '';
+    return 'Lớp $grade';
   }
 
   double calculatePriority() {
@@ -72,7 +81,7 @@ class VocabModel {
   VocabModel copyWith({
     String? id, String? word, String? phonetic, String? meaning,
     String? partOfSpeech, String? example, String? context, String? source,
-    bool? isBuiltIn, int? difficulty, int? forgetCount, double? errorRate,
+    bool? isBuiltIn, int? grade, int? difficulty, int? forgetCount, double? errorRate,
     DateTime? lastReviewDate, DateTime? createdAt, bool? isFavorite,
   }) {
     return VocabModel(
@@ -80,8 +89,9 @@ class VocabModel {
       meaning: meaning ?? this.meaning, partOfSpeech: partOfSpeech ?? this.partOfSpeech,
       example: example ?? this.example, context: context ?? this.context,
       source: source ?? this.source, isBuiltIn: isBuiltIn ?? this.isBuiltIn,
-      difficulty: difficulty ?? this.difficulty, forgetCount: forgetCount ?? this.forgetCount,
-      errorRate: errorRate ?? this.errorRate, lastReviewDate: lastReviewDate ?? this.lastReviewDate,
+      grade: grade ?? this.grade, difficulty: difficulty ?? this.difficulty,
+      forgetCount: forgetCount ?? this.forgetCount, errorRate: errorRate ?? this.errorRate,
+      lastReviewDate: lastReviewDate ?? this.lastReviewDate,
       createdAt: createdAt ?? this.createdAt, isFavorite: isFavorite ?? this.isFavorite,
     );
   }

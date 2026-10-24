@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_hoc_tieng_anh/shared/theme/app_theme.dart';
 import 'package:app_hoc_tieng_anh/core/controllers/theme_controller.dart';
+import 'package:app_hoc_tieng_anh/core/controllers/user_controller.dart';
 import 'package:app_hoc_tieng_anh/features/home/components/greeting_header.dart';
 import 'package:app_hoc_tieng_anh/features/home/components/daily_progress_card.dart';
 import 'package:app_hoc_tieng_anh/features/home/components/quick_actions.dart';
@@ -10,7 +11,13 @@ import 'package:app_hoc_tieng_anh/features/settings/settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   final ThemeController themeController;
-  const HomeScreen({super.key, required this.themeController});
+  final UserController userController;
+  
+  const HomeScreen({
+    super.key, 
+    required this.themeController,
+    required this.userController,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -21,8 +28,8 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header có chứa nút cài đặt
               GreetingHeader(
+                userController: userController,
                 onSettingsTap: () {
                   Navigator.push(
                     context,
@@ -31,7 +38,6 @@ class HomeScreen extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 20),
-              // Đã loại bỏ WeeklyCalendar
               const DailyProgressCard(),
               const SizedBox(height: 20),
               const QuickActions(),

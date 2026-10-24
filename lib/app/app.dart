@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:app_hoc_tieng_anh/shared/theme/app_theme.dart';
 import 'package:app_hoc_tieng_anh/core/controllers/theme_controller.dart';
+import 'package:app_hoc_tieng_anh/core/controllers/user_controller.dart';
 import 'package:app_hoc_tieng_anh/features/home/home_screen.dart';
 import 'package:app_hoc_tieng_anh/features/vocabulary/vocabulary_screen.dart';
 import 'package:app_hoc_tieng_anh/features/review/review_screen.dart';
 import 'package:app_hoc_tieng_anh/features/quiz/quiz_screen.dart';
+import 'package:app_hoc_tieng_anh/features/welcome/welcome_screen.dart';
 
 class App extends StatefulWidget {
   const App({super.key});
@@ -15,18 +17,35 @@ class App extends StatefulWidget {
 
 class _AppState extends State<App> {
   final ThemeController _themeController = ThemeController();
+  final UserController _userController = UserController();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    await _userController.init();
+    if (mounted) {
+      setState(() => _isInitialized = true);
+    }
+  }
 
   @override
   void dispose() {
     _themeController.dispose();
+    _userController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: _themeController,
+      listenable: Listenable.merge([_themeController, _userController]),
       builder: (context, child) {
         return MaterialApp(
           title: 'StudySpace',
@@ -35,7 +54,22 @@ class _AppState extends State<App> {
           darkTheme: AppTheme.darkTheme,
           themeMode: _themeController.themeMode,
           navigatorKey: _navigatorKey,
-          home: MainScreen(themeController: _themeController),
+          home: _isInitialized
+              ? (_userController.isFirstLaunch
+                  ? WelcomeScreen(
+                      userController: _userController,
+                      onCompleted: () {
+                        // Sau khi nhập tên xong, chuyển sang MainScreen
+                        setState(() {}); // Trigger rebuild
+                      },
+                    )
+                  : MainScreen(
+                      themeController: _themeController,
+                      userController: _userController,
+                    ))
+              : const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                ),
         );
       },
     );
@@ -44,7 +78,13 @@ class _AppState extends State<App> {
 
 class MainScreen extends StatefulWidget {
   final ThemeController themeController;
-  const MainScreen({super.key, required this.themeController});
+  final UserController userController;
+  
+  const MainScreen({
+    super.key, 
+    required this.themeController,
+    required this.userController,
+  });
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -52,15 +92,15 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  
-  // Chỉ giữ HomeScreen trong IndexedStack để tránh mất trạng thái cuộn
-  // Các màn hình khác render trực tiếp để giảm tải bộ nhớ
   late final HomeScreen _homeScreen;
 
   @override
   void initState() {
     super.initState();
-    _homeScreen = HomeScreen(themeController: widget.themeController);
+    _homeScreen = HomeScreen(
+      themeController: widget.themeController,
+      userController: widget.userController,
+    );
   }
 
   Widget _getScreen(int index) {
@@ -78,7 +118,6 @@ class _MainScreenState extends State<MainScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     
     return Scaffold(
-      // Bỏ IndexedStack, render trực tiếp widget theo index
       body: _getScreen(_currentIndex),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

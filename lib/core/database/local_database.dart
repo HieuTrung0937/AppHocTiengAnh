@@ -16,7 +16,6 @@ class LocalDatabase {
     return List.from(_vocabularies);
   }
 
-  /// Lọc theo 3 nhóm chính
   Future<List<VocabModel>> getVocabularyByGroup(String group) async {
     switch (group) {
       case 'Đã thêm':
@@ -30,8 +29,31 @@ class LocalDatabase {
     }
   }
 
+  /// Lọc thêm theo Lớp (Grade)
+  Future<List<VocabModel>> getVocabularyByGrade(int? grade) async {
+    if (grade == null) return getAllVocabulary();
+    return _vocabularies.where((v) => v.grade == grade).toList();
+  }
+
   Future<void> addVocabulary(VocabModel vocab) async {
     _vocabularies.add(vocab);
+  }
+
+  Future<bool> addToPersonalDictionary(VocabModel vocab) async {
+    final exists = _vocabularies.any((v) => v.word == vocab.word && !v.isBuiltIn);
+    if (exists) return false;
+
+    final personalVocab = vocab.copyWith(
+      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+      isBuiltIn: false,
+      source: 'Từ điển có sẵn',
+      forgetCount: 0,
+      errorRate: 0.0,
+      lastReviewDate: null,
+    );
+    
+    _vocabularies.add(personalVocab);
+    return true;
   }
 
   Future<void> updateVocabulary(VocabModel vocab) async {
@@ -47,7 +69,6 @@ class LocalDatabase {
     return sorted.take(limit).toList();
   }
 
-  /// Tạo danh sách từ mẫu + từ điển cứng
   List<VocabModel> _getSampleData() {
     final builtinWords = BuiltinDictionary.words.map((w) => VocabModel(
       id: w['id'] as String,
@@ -58,22 +79,16 @@ class LocalDatabase {
       example: w['example'] as String,
       source: 'Từ điển có sẵn',
       isBuiltIn: true,
+      grade: w['grade'] as int?, // Gán grade từ dictionary
       difficulty: w['difficulty'] as int,
     )).toList();
 
-    // Từ do người dùng thêm (mẫu test)
     final userWords = [
       VocabModel(
-        id: 'user_001', word: 'environment', phonetic: '/ɪnvaɪ.rən.mənt/', meaning: 'môi trường',
-        partOfSpeech: 'danh từ', example: 'We need to protect the environment.',
-        source: 'Quét OCR', isBuiltIn: false, difficulty: 3, forgetCount: 4, errorRate: 0.7,
-        lastReviewDate: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      VocabModel(
-        id: 'user_002', word: 'recycle', phonetic: '/riːˈsaɪ.kəl/', meaning: 'tái chế',
-        partOfSpeech: 'động từ', example: 'We recycle plastic bottles.',
-        source: 'Nhập tay', isBuiltIn: false, difficulty: 2, forgetCount: 3, errorRate: 0.6,
-        lastReviewDate: DateTime.now().subtract(const Duration(days: 5)),
+        id: 'user_001', word: 'pollution', phonetic: '/pəˈluː.ʃən/', meaning: 'ô nhiễm',
+        partOfSpeech: 'danh từ', example: 'Air pollution is bad.',
+        source: 'Quét OCR', isBuiltIn: false, grade: 10, difficulty: 2, forgetCount: 4, errorRate: 0.8,
+        lastReviewDate: DateTime.now().subtract(const Duration(days: 1)),
       ),
     ];
 
