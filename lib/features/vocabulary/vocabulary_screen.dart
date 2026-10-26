@@ -3,6 +3,7 @@ import 'package:app_hoc_tieng_anh/shared/theme/app_theme.dart';
 import 'package:app_hoc_tieng_anh/core/database/local_database.dart';
 import 'package:app_hoc_tieng_anh/core/database/vocab_model.dart';
 import 'package:app_hoc_tieng_anh/features/vocabulary/vocab_detail_screen.dart';
+import 'package:app_hoc_tieng_anh/features/vocabulary/components/add_edit_vocab_modal.dart';
 
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({super.key});
@@ -16,14 +17,14 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   
-  String _selectedGroup = 'Từ điển có sẵn'; // Mặc định vào từ điển để thấy lớp
-  int? _selectedGrade; // Null = Tất cả lớp
+  String _selectedGroup = 'Đã thêm';
+  int? _selectedGrade;
   List<VocabModel> _vocabularies = [];
   List<VocabModel> _filteredVocabularies = [];
   bool _isLoading = false;
 
   final List<String> _groups = ['Đã thêm', 'Hay quên', 'Từ điển có sẵn'];
-  final List<int?> _grades = [null, 10, 11, 12]; // Null đại diện cho "Tất cả"
+  final List<int?> _grades = [null, 10, 11, 12];
 
   @override
   void initState() {
@@ -46,11 +47,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     setState(() => _isLoading = true);
     List<VocabModel> data;
     
-    // Load theo Group trước
     if (_selectedGrade == null) {
       data = await _database.getVocabularyByGroup(_selectedGroup);
     } else {
-      // Nếu đã chọn lớp, load tất cả rồi lọc thêm (hoặc tối ưu bằng query riêng nếu cần)
       final all = await _database.getAllVocabulary();
       data = all.where((v) {
         bool matchGrade = v.grade == _selectedGrade;
@@ -58,7 +57,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         if (_selectedGroup == 'Đã thêm') matchGroup = !v.isBuiltIn;
         else if (_selectedGroup == 'Hay quên') matchGroup = v.forgetCount >= 3;
         else if (_selectedGroup == 'Từ điển có sẵn') matchGroup = v.isBuiltIn;
-        
         return matchGrade && matchGroup;
       }).toList();
     }
@@ -88,7 +86,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   void _changeGroup(String group) {
     setState(() {
       _selectedGroup = group;
-      _selectedGrade = null; // Reset lớp khi đổi nhóm
+      _selectedGrade = null;
       _searchController.clear();
       _loadData();
     });
@@ -99,6 +97,79 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       _selectedGrade = grade;
       _loadData();
     });
+  }
+
+  /// ✅ THÊM: Mở modal thêm từ mới
+  void _openAddModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddEditVocabModal(
+        onSave: (vocab) async {
+          await _database.addVocabulary(vocab);
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã thêm từ vựng mới')),
+            );
+            _loadData();
+          }
+        },
+      ),
+    );
+  }
+
+  /// ✅ SỬA: Mở modal chỉnh sửa
+  void _openEditModal(VocabModel vocab) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddEditVocabModal(
+        vocab: vocab,
+        onSave: (updatedVocab) async {
+          await _database.updateVocabulary(updatedVocab);
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã cập nhật từ vựng')),
+            );
+            _loadData();
+          }
+        },
+      ),
+    );
+  }
+
+  /// ✅ XÓA: Hiển thị dialog xác nhận
+  void _confirmDelete(VocabModel vocab) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa từ vựng?'),
+        content: Text('Bạn có chắc muốn xóa "${vocab.word}" không? Hành động này không thể hoàn tác.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await _database.deleteVocabulary(vocab.id);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã xóa từ vựng')),
+                );
+                _loadData();
+              }
+            },
+            child: const Text('Xóa', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
   }
 
   Color _getStatusColor(VocabModel vocab) {
@@ -134,7 +205,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       ),
       body: Column(
         children: [
-          // 1. Tab Nhóm chính
           Container(
             height: 50,
             color: bgColor,
@@ -161,35 +231,30 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               }).toList(),
             ),
           ),
-          
-          // 2. Tab Lớp (Chỉ hiện rõ khi ở nhóm Từ điển có sẵn hoặc Đã thêm)
-          if (_selectedGroup != 'Hay quên') 
-          Container(
-            height: 40,
-            color: bgColor,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _grades.length,
-              itemBuilder: (context, index) {
-                final grade = _grades[index];
-                final isSelected = _selectedGrade == grade;
-                final label = grade == null ? 'Tất cả' : 'Lớp $grade';
-                
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ActionChip(
-                    label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : textSecondary)),
-                    backgroundColor: isSelected ? AppColors.primary.withOpacity(0.8) : cardBgColor,
-                    side: BorderSide(color: isSelected ? AppColors.primary : theme.colorScheme.outlineVariant.withOpacity(0.3)),
-                    onPressed: () => _changeGrade(grade),
-                  ),
-                );
-              },
+          if (_selectedGroup != 'Hay quên')
+            Container(
+              height: 40,
+              color: bgColor,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _grades.length,
+                itemBuilder: (context, index) {
+                  final grade = _grades[index];
+                  final isSelected = _selectedGrade == grade;
+                  final label = grade == null ? 'Tất cả' : 'Lớp $grade';
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ActionChip(
+                      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : textSecondary)),
+                      backgroundColor: isSelected ? AppColors.primary.withOpacity(0.8) : cardBgColor,
+                      side: BorderSide(color: isSelected ? AppColors.primary : theme.colorScheme.outlineVariant.withOpacity(0.3)),
+                      onPressed: () => _changeGrade(grade),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-
-          // 3. Ô tìm kiếm
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Container(
@@ -211,25 +276,82 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               ),
             ),
           ),
-
-          // 4. Danh sách từ
+          if (_searchController.text.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(children: [Text('Tìm thấy ${_filteredVocabularies.length} kết quả', style: TextStyle(fontSize: 12, color: textSecondary))]),
+            ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredVocabularies.isEmpty
-                    ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.search_off, size: 48, color: textSecondary), const SizedBox(height: 12), Text('Không tìm thấy từ phù hợp.', style: TextStyle(color: textSecondary))]))
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_off, size: 48, color: textSecondary),
+                            const SizedBox(height: 12),
+                            Text(_searchController.text.isNotEmpty ? 'Không tìm thấy từ phù hợp.' : 'Chưa có từ vựng nào.', style: TextStyle(color: textSecondary)),
+                          ],
+                        ),
+                      )
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: _filteredVocabularies.length,
                         itemBuilder: (context, index) {
-                          return _buildVocabCard(_filteredVocabularies[index], cardBgColor, textPrimary, textSecondary);
+                          final vocab = _filteredVocabularies[index];
+                          // ✅ Swipe to delete chỉ hiện ở tab "Đã thêm"
+                          if (_selectedGroup == 'Đã thêm') {
+                            return Dismissible(
+                              key: Key(vocab.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.delete_outline, color: Colors.white),
+                              ),
+                              confirmDismiss: (direction) async {
+                                return await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Xóa từ vựng?'),
+                                    content: Text('Bạn có chắc muốn xóa "${vocab.word}"?'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Xóa', style: TextStyle(color: AppColors.error))),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (direction) async {
+                                await _database.deleteVocabulary(vocab.id);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Đã xóa từ vựng')),
+                                  );
+                                  _loadData();
+                                }
+                              },
+                              child: _buildVocabCard(vocab, cardBgColor, textPrimary, textSecondary),
+                            );
+                          }
+                          return _buildVocabCard(vocab, cardBgColor, textPrimary, textSecondary);
                         },
                       ),
           ),
         ],
       ),
+      // ✅ FAB chỉ hiện ở tab "Đã thêm" khi không search
       floatingActionButton: _selectedGroup == 'Đã thêm' && _searchController.text.isEmpty
-          ? FloatingActionButton(onPressed: () {}, backgroundColor: AppColors.primary, child: const Icon(Icons.add, color: Colors.white))
+          ? FloatingActionButton(
+              onPressed: _openAddModal,
+              backgroundColor: AppColors.primary,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
           : null,
     );
   }
@@ -237,7 +359,16 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   Widget _buildVocabCard(VocabModel vocab, Color cardColor, Color textPrimary, Color textSecondary) {
     return InkWell(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => VocabDetailScreen(vocab: vocab, isBuiltIn: vocab.isBuiltIn)));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => VocabDetailScreen(vocab: vocab, isBuiltIn: vocab.isBuiltIn)),
+        );
+      },
+      onLongPress: () {
+        // ✅ Long press để hiện menu (chỉ ở tab "Đã thêm")
+        if (_selectedGroup == 'Đã thêm') {
+          _showVocabMenu(vocab);
+        }
       },
       borderRadius: BorderRadius.circular(12),
       child: Card(
@@ -254,10 +385,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(child: Text(vocab.word, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary))),
+                  Expanded(
+                    child: Text(vocab.word, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary)),
+                  ),
                   Row(
                     children: [
-                      // Badge Lớp
                       if (vocab.grade != null)
                         Container(
                           margin: const EdgeInsets.only(right: 6),
@@ -265,7 +397,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                           decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
                           child: Text('L${vocab.grade}', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
-                      // Badge Trạng thái
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(color: _getStatusColor(vocab).withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
@@ -291,6 +422,36 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// ✅ Menu popup khi long-press (chỉ ở tab "Đã thêm")
+  void _showVocabMenu(VocabModel vocab) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit, color: AppColors.primary),
+              title: const Text('Chỉnh sửa'),
+              onTap: () {
+                Navigator.pop(context);
+                _openEditModal(vocab);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: AppColors.error),
+              title: const Text('Xóa', style: TextStyle(color: AppColors.error)),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDelete(vocab);
+              },
+            ),
+          ],
         ),
       ),
     );

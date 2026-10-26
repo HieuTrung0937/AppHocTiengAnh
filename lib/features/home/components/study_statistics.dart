@@ -1,8 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:app_hoc_tieng_anh/shared/theme/app_theme.dart';
+import 'package:app_hoc_tieng_anh/core/database/local_database.dart';
+import 'package:app_hoc_tieng_anh/core/database/vocab_model.dart';
 
-class StudyStatistics extends StatelessWidget {
+class StudyStatistics extends StatefulWidget {
   const StudyStatistics({super.key});
+
+  @override
+  State<StudyStatistics> createState() => _StudyStatisticsState();
+}
+
+class _StudyStatisticsState extends State<StudyStatistics> {
+  final LocalDatabase _database = LocalDatabase();
+  
+  int _totalSaved = 0;
+  int _mastered = 0;
+  int _forgetCount = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final allVocabs = await _database.getAllVocabulary();
+    final forgetVocabs = await _database.getVocabularyByGroup('Hay quên');
+    
+    int masteredCount = 0;
+    int savedCount = 0;
+
+    for (var vocab in allVocabs) {
+      // Tổng đã lưu: Chỉ tính từ do người dùng thêm (không phải từ điển có sẵn)
+      if (!vocab.isBuiltIn) {
+        savedCount++;
+      }
+      
+      // Đã nắm vững: errorRate thấp, chưa từng quên, và đã được ôn ít nhất 1 lần
+      if (vocab.errorRate < 0.2 && vocab.forgetCount == 0 && vocab.lastReviewDate != null) {
+        masteredCount++;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _totalSaved = savedCount;
+        _mastered = masteredCount;
+        _forgetCount = forgetVocabs.length;
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,13 +76,18 @@ class StudyStatistics extends StatelessWidget {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textColor),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildStatItem('Tổng đã lưu', '24', textColor, theme, isDark),
-              const SizedBox(width: 12),
-              _buildStatItem('Đã nắm vững', '6', AppColors.success, theme, isDark),
-            ],
-          ),
+          
+          if (_isLoading)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+          else
+            Row(
+              children: [
+                _buildStatItem('Tổng đã lưu', '$_totalSaved', textColor, theme, isDark),
+                const SizedBox(width: 12),
+                _buildStatItem('Đã nắm vững', '$_mastered', AppColors.success, theme, isDark),
+              ],
+            ),
+          
           const SizedBox(height: 16),
           Container(
             width: double.infinity,
@@ -52,7 +106,7 @@ class StudyStatistics extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Có 7 từ đang ở trạng thái "Hay quên"',
+                        'Có $_forgetCount từ đang ở trạng thái "Hay quên"',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.error),
                       ),
                       const SizedBox(height: 2),

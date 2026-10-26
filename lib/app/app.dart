@@ -29,7 +29,12 @@ class _AppState extends State<App> {
   }
 
   Future<void> _initializeApp() async {
-    await _userController.init();
+    // Khởi tạo song song để nhanh hơn
+    await Future.wait([
+      _themeController.init(),
+      _userController.init(),
+    ]);
+    
     if (mounted) {
       setState(() => _isInitialized = true);
     }
@@ -44,24 +49,22 @@ class _AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ UI-02: Dùng ListenableBuilder để rebuild mượt mà, tránh lag
     return ListenableBuilder(
       listenable: Listenable.merge([_themeController, _userController]),
       builder: (context, child) {
         return MaterialApp(
-          title: 'StudySpace',
+          title: 'Memora', // Tên app mới
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
-          themeMode: _themeController.themeMode,
+          themeMode: _themeController.themeMode, // Lấy trạng thái từ controller
           navigatorKey: _navigatorKey,
           home: _isInitialized
               ? (_userController.isFirstLaunch
                   ? WelcomeScreen(
                       userController: _userController,
-                      onCompleted: () {
-                        // Sau khi nhập tên xong, chuyển sang MainScreen
-                        setState(() {}); // Trigger rebuild
-                      },
+                      onCompleted: () => setState(() {}), // Trigger rebuild để vào MainScreen
                     )
                   : MainScreen(
                       themeController: _themeController,
