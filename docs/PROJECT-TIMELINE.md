@@ -481,15 +481,6 @@ flutter clean && flutter pub get
 - Load data trong `initState()`, không trong `build()`
 - Dùng `FutureBuilder` cẩn thận (có thể gây rebuild liên tục)
 
----
-
-## 📞 LIÊN HỆ
-
-- **Developer trước**: [Tên của bạn]
-- **Ngày bàn giao**: 27/10/2026
-- **Trạng thái**: Prototype chức năng hoàn chỉnh, sẵn sàng cho giai đoạn polish & production
-
----
 
 ## 🎉 KẾT LUẬN
 
