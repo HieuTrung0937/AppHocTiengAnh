@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:app_hoc_tieng_anh/shared/theme/app_theme.dart';
 import 'package:app_hoc_tieng_anh/core/database/local_database.dart';
 import 'package:app_hoc_tieng_anh/core/database/vocab_model.dart';
+import 'package:app_hoc_tieng_anh/core/services/notification_service.dart';
 import 'package:app_hoc_tieng_anh/features/review/components/review_progress_bar.dart';
 import 'package:app_hoc_tieng_anh/features/review/components/flashcard_card.dart';
 import 'package:app_hoc_tieng_anh/features/review/components/spaced_repetition_actions.dart';
+import 'package:app_hoc_tieng_anh/features/vocabulary/components/add_edit_vocab_modal.dart';
 
 class ReviewScreen extends StatefulWidget {
   const ReviewScreen({super.key});
@@ -45,6 +47,16 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final updatedVocab = currentVocab.updateAfterReview(quality);
     await _database.updateVocabulary(updatedVocab);
 
+    // ✅ Lên lịch thông báo ôn tập tiếp theo
+    await NotificationService().cancelNotification(currentVocab.id);
+    if (updatedVocab.nextReviewDate != null) {
+      await NotificationService().scheduleReviewNotification(
+        wordId: updatedVocab.id,
+        word: updatedVocab.word,
+        scheduledDate: updatedVocab.nextReviewDate!,
+      );
+    }
+
     if (quality >= 2) {
       _masteredCount++;
     } else {
@@ -52,10 +64,28 @@ class _ReviewScreenState extends State<ReviewScreen> {
     }
 
     if (mounted) {
-      setState(() {
-        _currentIndex++;
-      });
+      setState(() => _currentIndex++);
     }
+  }
+
+  void _openAddWordModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddEditVocabModal(
+        onSave: (vocab) async {
+          await _database.addVocabulary(vocab);
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã thêm từ vào danh sách ôn tập')),
+            );
+            _loadReviewList();
+          }
+        },
+      ),
+    );
   }
 
   @override
@@ -74,6 +104,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 ? _buildEmptyState(textPrimary, textSecondary)
                 : _buildReviewContent(textPrimary, textSecondary),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openAddWordModal,
+        backgroundColor: AppColors.primary,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 
@@ -83,34 +118,27 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
     return Column(
       children: [
-        // Progress bar ở trên
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           child: ReviewProgressBar(
             currentIndex: _currentIndex + 1,
             totalWords: totalWords,
-            category: 'Môi trường · Ôn cá nhân',
+            category: 'Ôn tập từ vựng',
           ),
         ),
-        
-        // Flashcard TO ở giữa
-        Expanded(
-          flex: 3,
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.55,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: FlashcardCard(vocab: currentVocab),
           ),
         ),
-        
-        // Phần dưới: Flexible thay vì Expanded để tránh overflow
-        Flexible(
-          flex: 2,
+        Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Nút Trước
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
@@ -122,13 +150,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     style: TextButton.styleFrom(foregroundColor: textSecondary),
                   ),
                 ),
-                const SizedBox(height: 12),
-                
-                // 4 nút đánh giá
+                const SizedBox(height: 8),
                 SpacedRepetitionActions(onRate: _handleRate),
                 const SizedBox(height: 12),
-                
-                // Thống kê nhanh
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -156,29 +180,26 @@ class _ReviewScreenState extends State<ReviewScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.celebration, size: 64, color: AppColors.primary),
+            Icon(Icons.school_outlined, size: 64, color: AppColors.primary),
             const SizedBox(height: 20),
             Text(
-              'Hoàn thành xuất sắc!',
+              'Chưa có từ vựng nào để ôn',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: textPrimary),
             ),
             const SizedBox(height: 8),
             Text(
-              'Bạn đã ôn xong $_masteredCount từ hôm nay.',
+              'Hãy thêm từ vựng bạn muốn học để bắt đầu ôn tập.',
               style: TextStyle(fontSize: 14, color: textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _currentIndex = 0;
-                  _masteredCount = 0;
-                  _needReviewCount = 0;
-                });
-                _loadReviewList();
-              },
-              child: const Text('Ôn tập lại'),
+            ElevatedButton.icon(
+              onPressed: _openAddWordModal,
+              icon: const Icon(Icons.add),
+              label: const Text('Thêm từ vựng mới'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              ),
             ),
           ],
         ),

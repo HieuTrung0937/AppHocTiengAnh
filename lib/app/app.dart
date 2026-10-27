@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app_hoc_tieng_anh/shared/theme/app_theme.dart';
 import 'package:app_hoc_tieng_anh/core/controllers/theme_controller.dart';
 import 'package:app_hoc_tieng_anh/core/controllers/user_controller.dart';
+import 'package:app_hoc_tieng_anh/core/navigation_key.dart';
 import 'package:app_hoc_tieng_anh/features/home/home_screen.dart';
 import 'package:app_hoc_tieng_anh/features/vocabulary/vocabulary_screen.dart';
 import 'package:app_hoc_tieng_anh/features/review/review_screen.dart';
@@ -18,7 +19,7 @@ class App extends StatefulWidget {
 class _AppState extends State<App> {
   final ThemeController _themeController = ThemeController();
   final UserController _userController = UserController();
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  
   
   bool _isInitialized = false;
 
@@ -59,7 +60,7 @@ class _AppState extends State<App> {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: _themeController.themeMode, // Lấy trạng thái từ controller
-          navigatorKey: _navigatorKey,
+          navigatorKey: navigatorKey,
           home: _isInitialized
               ? (_userController.isFirstLaunch
                   ? WelcomeScreen(

@@ -66,6 +66,9 @@ class LocalDatabase {
       forgetCount: 0,
       errorRate: 0.0,
       lastReviewDate: null,
+      nextReviewDate: null,
+      interval: 0,
+      easeFactor: 2.5,
     );
     
     _vocabularies.add(personalVocab);
@@ -81,7 +84,7 @@ class LocalDatabase {
     }
   }
 
-  /// ✅ MỚI: Xóa từ vựng
+  /// Xóa 1 từ
   Future<bool> deleteVocabulary(String id) async {
     final initialLength = _vocabularies.length;
     _vocabularies.removeWhere((v) => v.id == id);
@@ -92,40 +95,42 @@ class LocalDatabase {
     return false;
   }
 
-  /// ✅ MỚI: Kiểm tra từ đã tồn tại trong "Đã thêm" chưa
+  /// ✅ MỚI: Xóa hàng loạt theo danh sách ID
+  Future<int> deleteVocabularies(List<String> ids) async {
+    final initialLength = _vocabularies.length;
+    _vocabularies.removeWhere((v) => ids.contains(v.id));
+    final deletedCount = initialLength - _vocabularies.length;
+    if (deletedCount > 0) {
+      await _saveToDisk();
+    }
+    return deletedCount;
+  }
+
   bool existsInPersonal(String word) {
     return _vocabularies.any((v) => v.word.toLowerCase() == word.toLowerCase() && !v.isBuiltIn);
   }
 
   Future<List<VocabModel>> getWordsToReview({int limit = 20}) async {
-    final sorted = List<VocabModel>.from(_vocabularies);
-    sorted.sort((a, b) => b.calculatePriority().compareTo(a.calculatePriority()));
-    return sorted.take(limit).toList();
+    final userVocabs = _vocabularies.where((v) => !v.isBuiltIn).toList();
+    userVocabs.sort((a, b) => b.calculatePriority().compareTo(a.calculatePriority()));
+    return userVocabs.take(limit).toList();
+  }
+
+  Future<int> getDueReviewCount() async {
+    final today = DateTime.now();
+    return _vocabularies.where((v) {
+      if (v.isBuiltIn) return false;
+      if (v.nextReviewDate == null) return true;
+      return v.nextReviewDate!.isBefore(today.add(const Duration(days: 1)));
+    }).length;
   }
 
   List<VocabModel> _getSampleData() {
-    final builtinWords = BuiltinDictionary.words.map((w) => VocabModel(
+    return BuiltinDictionary.words.map((w) => VocabModel(
       id: w['id'] as String, word: w['word'] as String, phonetic: w['phonetic'] as String,
       meaning: w['meaning'] as String, partOfSpeech: w['partOfSpeech'] as String,
       example: w['example'] as String, source: 'Từ điển có sẵn', isBuiltIn: true,
       grade: w['grade'] as int?, difficulty: w['difficulty'] as int,
     )).toList();
-
-    final userWords = [
-      VocabModel(
-        id: 'user_001', word: 'environment', phonetic: '/ɪnˈvaɪ.rən.mənt/', meaning: 'môi trường',
-        partOfSpeech: 'danh từ', example: 'We need to protect the environment.',
-        source: 'Quét OCR', isBuiltIn: false, grade: 10, difficulty: 3, forgetCount: 4, errorRate: 0.8,
-        lastReviewDate: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      VocabModel(
-        id: 'user_002', word: 'recycle', phonetic: '/riːˈsaɪ.kəl/', meaning: 'tái chế',
-        partOfSpeech: 'động từ', example: 'We recycle plastic bottles.',
-        source: 'Nhập tay', isBuiltIn: false, grade: 10, difficulty: 2, forgetCount: 3, errorRate: 0.6,
-        lastReviewDate: DateTime.now().subtract(const Duration(days: 5)),
-      ),
-    ];
-
-    return [...builtinWords, ...userWords];
   }
 }

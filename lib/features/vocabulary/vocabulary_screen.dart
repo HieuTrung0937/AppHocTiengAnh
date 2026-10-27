@@ -23,6 +23,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   List<VocabModel> _filteredVocabularies = [];
   bool _isLoading = false;
 
+  // ✅ Chế độ chọn nhiều (Multi-select)
+  bool _isSelectionMode = false;
+  Set<String> _selectedIds = {};
+
   final List<String> _groups = ['Đã thêm', 'Hay quên', 'Từ điển có sẵn'];
   final List<int?> _grades = [null, 10, 11, 12];
 
@@ -66,6 +70,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         _vocabularies = data;
         _applyFilters();
         _isLoading = false;
+        // Thoát chế độ chọn khi load dữ liệu mới
+        if (_isSelectionMode) _exitSelectionMode();
       });
     }
   }
@@ -99,7 +105,68 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     });
   }
 
-  /// ✅ THÊM: Mở modal thêm từ mới
+  // ✅ Logic chế độ chọn nhiều
+  void _enterSelectionMode(String id) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedIds.add(id);
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+        if (_selectedIds.isEmpty) _exitSelectionMode();
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selectedIds = _filteredVocabularies.map((v) => v.id).toSet();
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa các từ đã chọn?'),
+        content: Text('Bạn có chắc muốn xóa ${_selectedIds.length} từ vựng? Hành động này không thể hoàn tác.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final deletedCount = await _database.deleteVocabularies(_selectedIds.toList());
+      _exitSelectionMode();
+      _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã xóa $deletedCount từ vựng')),
+        );
+      }
+    }
+  }
+
   void _openAddModal() {
     showModalBottomSheet(
       context: context,
@@ -110,9 +177,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           await _database.addVocabulary(vocab);
           if (mounted) {
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Đã thêm từ vựng mới')),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã thêm từ vựng mới')));
             _loadData();
           }
         },
@@ -120,8 +185,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     );
   }
 
-  /// ✅ SỬA: Mở modal chỉnh sửa
   void _openEditModal(VocabModel vocab) {
+    _exitSelectionMode();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -132,42 +197,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           await _database.updateVocabulary(updatedVocab);
           if (mounted) {
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Đã cập nhật từ vựng')),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã cập nhật từ vựng')));
             _loadData();
           }
         },
-      ),
-    );
-  }
-
-  /// ✅ XÓA: Hiển thị dialog xác nhận
-  void _confirmDelete(VocabModel vocab) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xóa từ vựng?'),
-        content: Text('Bạn có chắc muốn xóa "${vocab.word}" không? Hành động này không thể hoàn tác.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await _database.deleteVocabulary(vocab.id);
-              if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã xóa từ vựng')),
-                );
-                _loadData();
-              }
-            },
-            child: const Text('Xóa', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
       ),
     );
   }
@@ -195,13 +228,40 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final textSecondary = theme.textTheme.bodySmall?.color ?? Colors.grey;
     final inputBgColor = theme.colorScheme.surfaceContainerHighest ?? AppColors.surfaceVariant;
 
+    // Chỉ hiện nút "Chọn" ở tab "Đã thêm" và khi không tìm kiếm
+    final canSelect = _selectedGroup == 'Đã thêm' && _searchController.text.isEmpty;
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text('Kho từ vựng', style: TextStyle(color: textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
         backgroundColor: bgColor,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
+        title: _isSelectionMode
+            ? Text('Đã chọn ${_selectedIds.length}', style: TextStyle(color: textPrimary, fontSize: 18))
+            : Text('Kho từ vựng', style: TextStyle(color: textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
+        leading: _isSelectionMode
+            ? IconButton(icon: Icon(Icons.close, color: textPrimary), onPressed: _exitSelectionMode)
+            : null,
+        actions: [
+          if (_isSelectionMode)
+            TextButton(
+              onPressed: _selectedIds.length == _filteredVocabularies.length ? null : _selectAll,
+              child: Text('Tất cả', style: TextStyle(color: AppColors.primary)),
+            ),
+          if (_isSelectionMode)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppColors.error),
+              onPressed: _selectedIds.isEmpty ? null : _deleteSelected,
+            ),
+          if (! _isSelectionMode && canSelect)
+            IconButton(
+              icon: const Icon(Icons.checklist, color: AppColors.primary),
+              onPressed: () {
+                // Không làm gì, chỉ để người dùng biết có thể long-press
+              },
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -300,18 +360,17 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                         itemCount: _filteredVocabularies.length,
                         itemBuilder: (context, index) {
                           final vocab = _filteredVocabularies[index];
-                          // ✅ Swipe to delete chỉ hiện ở tab "Đã thêm"
-                          if (_selectedGroup == 'Đã thêm') {
+                          final isSelected = _selectedIds.contains(vocab.id);
+                          
+                          // Vuốt để xóa nhanh (chỉ khi không ở chế độ chọn)
+                          if (_selectedGroup == 'Đã thêm' && !_isSelectionMode) {
                             return Dismissible(
                               key: Key(vocab.id),
                               direction: DismissDirection.endToStart,
                               background: Container(
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.only(right: 20),
-                                decoration: BoxDecoration(
-                                  color: AppColors.error,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                                decoration: BoxDecoration(color: AppColors.error, borderRadius: BorderRadius.circular(12)),
                                 child: const Icon(Icons.delete_outline, color: Colors.white),
                               ),
                               confirmDismiss: (direction) async {
@@ -330,23 +389,20 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                               onDismissed: (direction) async {
                                 await _database.deleteVocabulary(vocab.id);
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Đã xóa từ vựng')),
-                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa từ vựng')));
                                   _loadData();
                                 }
                               },
-                              child: _buildVocabCard(vocab, cardBgColor, textPrimary, textSecondary),
+                              child: _buildVocabCard(vocab, cardBgColor, textPrimary, textSecondary, isSelected: false),
                             );
                           }
-                          return _buildVocabCard(vocab, cardBgColor, textPrimary, textSecondary);
+                          return _buildVocabCard(vocab, cardBgColor, textPrimary, textSecondary, isSelected: isSelected);
                         },
                       ),
           ),
         ],
       ),
-      // ✅ FAB chỉ hiện ở tab "Đã thêm" khi không search
-      floatingActionButton: _selectedGroup == 'Đã thêm' && _searchController.text.isEmpty
+      floatingActionButton: _selectedGroup == 'Đã thêm' && _searchController.text.isEmpty && !_isSelectionMode
           ? FloatingActionButton(
               onPressed: _openAddModal,
               backgroundColor: AppColors.primary,
@@ -356,102 +412,96 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     );
   }
 
-  Widget _buildVocabCard(VocabModel vocab, Color cardColor, Color textPrimary, Color textSecondary) {
+  Widget _buildVocabCard(VocabModel vocab, Color cardColor, Color textPrimary, Color textSecondary, {required bool isSelected}) {
     return InkWell(
+      // Nếu đang ở chế độ chọn: chạm để tích/bỏ tích
+      // Nếu không: chạm để xem chi tiết
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => VocabDetailScreen(vocab: vocab, isBuiltIn: vocab.isBuiltIn)),
-        );
+        if (_isSelectionMode) {
+          _toggleSelection(vocab.id);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => VocabDetailScreen(vocab: vocab, isBuiltIn: vocab.isBuiltIn)),
+          );
+        }
       },
+      // Giữ lâu để vào chế độ chọn (chỉ ở tab "Đã thêm")
       onLongPress: () {
-        // ✅ Long press để hiện menu (chỉ ở tab "Đã thêm")
-        if (_selectedGroup == 'Đã thêm') {
-          _showVocabMenu(vocab);
+        if (_selectedGroup == 'Đã thêm' && !_isSelectionMode) {
+          _enterSelectionMode(vocab.id);
         }
       },
       borderRadius: BorderRadius.circular(12),
       child: Card(
-        color: cardColor,
+        color: isSelected ? AppColors.primary.withOpacity(0.1) : cardColor,
         margin: const EdgeInsets.only(bottom: 12),
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: isSelected ? AppColors.primary : Colors.transparent, width: 1.5),
+        ),
         surfaceTintColor: Colors.transparent,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(vocab.word, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary)),
-                  ),
-                  Row(
-                    children: [
-                      if (vocab.grade != null)
-                        Container(
-                          margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                          child: Text('L${vocab.grade}', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+              // Checkbox khi ở chế độ chọn
+              if (_isSelectionMode) ...[
+                Icon(
+                  isSelected ? Icons.check_circle : Icons.circle_outlined,
+                  color: isSelected ? AppColors.primary : textSecondary,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(vocab.word, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary)),
                         ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: _getStatusColor(vocab).withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
-                        child: Text(_getStatusText(vocab), style: TextStyle(color: _getStatusColor(vocab), fontSize: 11, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(vocab.phonetic, style: TextStyle(fontSize: 14, color: textSecondary)),
-              const SizedBox(height: 8),
-              Text(vocab.meaning, style: TextStyle(fontSize: 16, color: textPrimary)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.book_outlined, size: 14, color: AppColors.textHint),
-                  const SizedBox(width: 4),
-                  Text('Nguồn: ${vocab.source}', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
-                  const Spacer(),
-                  if (vocab.forgetCount > 0) Text('${vocab.forgetCount} lần quên', style: const TextStyle(fontSize: 11, color: AppColors.error)),
-                ],
+                        Row(
+                          children: [
+                            if (vocab.grade != null)
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                                child: Text('L${vocab.grade}', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(color: _getStatusColor(vocab).withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                              child: Text(_getStatusText(vocab), style: TextStyle(color: _getStatusColor(vocab), fontSize: 11, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(vocab.phonetic, style: TextStyle(fontSize: 14, color: textSecondary)),
+                    const SizedBox(height: 8),
+                    Text(vocab.meaning, style: TextStyle(fontSize: 16, color: textPrimary)),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.book_outlined, size: 14, color: AppColors.textHint),
+                        const SizedBox(width: 4),
+                        Text('Nguồn: ${vocab.source}', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+                        const Spacer(),
+                        if (vocab.forgetCount > 0) Text('${vocab.forgetCount} lần quên', style: const TextStyle(fontSize: 11, color: AppColors.error)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  /// ✅ Menu popup khi long-press (chỉ ở tab "Đã thêm")
-  void _showVocabMenu(VocabModel vocab) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit, color: AppColors.primary),
-              title: const Text('Chỉnh sửa'),
-              onTap: () {
-                Navigator.pop(context);
-                _openEditModal(vocab);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.error),
-              title: const Text('Xóa', style: TextStyle(color: AppColors.error)),
-              onTap: () {
-                Navigator.pop(context);
-                _confirmDelete(vocab);
-              },
-            ),
-          ],
         ),
       ),
     );

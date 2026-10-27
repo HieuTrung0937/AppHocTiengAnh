@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:app_hoc_tieng_anh/shared/theme/app_theme.dart';
 import 'package:app_hoc_tieng_anh/core/database/local_database.dart';
-import 'package:app_hoc_tieng_anh/core/database/vocab_model.dart';
 
 class DailyProgressCard extends StatefulWidget {
   const DailyProgressCard({super.key});
@@ -12,7 +11,7 @@ class DailyProgressCard extends StatefulWidget {
 
 class _DailyProgressCardState extends State<DailyProgressCard> {
   final LocalDatabase _database = LocalDatabase();
-  List<VocabModel> _forgetWords = [];
+  int _dueCount = 0;
   bool _isLoading = true;
 
   @override
@@ -22,10 +21,10 @@ class _DailyProgressCardState extends State<DailyProgressCard> {
   }
 
   Future<void> _loadData() async {
-    final words = await _database.getVocabularyByGroup('Hay quên');
+    final count = await _database.getDueReviewCount();
     if (mounted) {
       setState(() {
-        _forgetWords = words;
+        _dueCount = count;
         _isLoading = false;
       });
     }
@@ -48,7 +47,7 @@ class _DailyProgressCardState extends State<DailyProgressCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Từ vựng cần củng cố',
+                  'Từ vựng cần ôn hôm nay',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70),
                 ),
                 const SizedBox(height: 8),
@@ -58,19 +57,19 @@ class _DailyProgressCardState extends State<DailyProgressCard> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '${_forgetWords.length}',
+                            '$_dueCount',
                             style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
                           ),
                           const SizedBox(width: 8),
                           const Text(
-                            'từ hay quên',
+                            'từ cần ôn',
                             style: TextStyle(fontSize: 14, color: Colors.white70),
                           ),
                         ],
                       ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Hệ thống đã tự động ưu tiên các từ này dựa trên lịch sử ôn tập.',
+                  'Hệ thống tự động ưu tiên từ dựa trên thuật toán Spaced Repetition.',
                   style: TextStyle(fontSize: 12, color: Colors.white60, height: 1.4),
                 ),
               ],
@@ -84,7 +83,7 @@ class _DailyProgressCardState extends State<DailyProgressCard> {
               color: Colors.white.withOpacity(isDark ? 0.2 : 0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 28),
+            child: const Icon(Icons.schedule, color: Colors.white, size: 28),
           ),
         ],
       ),
