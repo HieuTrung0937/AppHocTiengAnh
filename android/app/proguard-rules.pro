@@ -1,0 +1,8 @@
+-keep class com.google.mlkit.vision.text.** { *; }
+-keep class com.google.android.gms.vision.text.** { *; }
+-keep class com.google.mlkit.vision.text.chinese.** { *; }
+-keep class com.google.mlkit.vision.text.japanese.** { *; }
+-keep class com.google.mlkit.vision.text.korean.** { *; }
+-keep class com.google.mlkit.vision.text.devanagari.** { *; }
+-dontwarn com.google.mlkit.vision.text.**
+-dontwarn com.google.android.gms.vision.text.**
